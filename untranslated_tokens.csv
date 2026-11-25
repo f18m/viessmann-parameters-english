@@ -45,7 +45,7 @@ Boiler4,19,Ecotronic,nviBoilerState_PM_state_Boiler4~0xA2C0,nviBoilerState_PM_st
 sep,19,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Mischer_sep_NatCooling_Kreis_SollPos~0x0604,WPR_Mixer_sep_Natural_Cooling_Circuit_Target_Position~0x0604
 nviDHWC,18,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nviDHWC_Setpt~0xA3C0,nviDHWC_Setpt~0xA3C0
 nvoEffectSetpt,18,"CU401B_A, CU401B_G, CU401B_S, Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nvoEffectSetpt_BLR~0xA307,nvoEffectSetpt_BLR~0xA307
-dT,17,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW, VPlusHO1_40, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",WPR_WW_TWWSpeicher_dT_dt_MigrationChange_33~0x600D,WPR_WW_Hot_water_storage_dT_dt_migration_Change_33~0x600D
+dT,17,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW, VPlusHO1_40, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",WPR_WW_TWWSpeicher_dT_dt_MigrationChange_33~0x600D,WPR_DHW_TWW_Storage_dT_dt_migration_Change_33~0x600D
 Rev,17,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",Ecotronic_DA_Linearmotor_Rost_Rev~0x5212,Ecotronic_DA_Linear_motor_Grate_Rev~0x5212
 nviApplicMode,16,"CU401B_A, CU401B_G, CU401B_S, Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nviApplicMode_BLR~0xA302,nviApplicMode_BLR~0xA302
 nviSetpoint,16,"CU401B_A, CU401B_G, CU401B_S, Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nviSetpoint_BLR~0xA303,nviSetpoint_BLR~0xA303
@@ -64,13 +64,13 @@ Nonstandard,9,"CU401B_A, CU401B_G, CU401B_S",WPR3_Split_Speicherladepumpe_Nonsta
 nviAlarm,9,Ecotronic,nviAlarm_Anlage~0xA10A,nviAlarm_System~0xA10A
 nvoBoilerState,9,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nvoBoilerState_BLR_state~0xA305,nvoBoilerState_BLR_state~0xA305
 nvoOATemp,9,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nvoOATemp~0xA14F,nvoOATemp~0xA14F
-Opt,9,"CU401B_A, CU401B_G, CU401B_S",WPR3_Split_Opt_Leistung_WW~0x601C,WPR3_Split_Opt_Power_WW~0x601C
+Opt,9,"CU401B_A, CU401B_G, CU401B_S",WPR3_Split_Opt_Leistung_WW~0x601C,WPR3_Split_Opt_Power_DHW~0x601C
 Profile,9,"CU401B_A, CU401B_G, CU401B_S",WPR3_Split_Speicherladepumpe_Nonstandard_Profile~0x6032,WPR3_Split_Storage_charging_pump_Nonstandard_Profile~0x6032
 Prop,9,"CU401B_A, CU401B_G, CU401B_S",WPR3_Split_Heizleistungsregler_Prop_Anteil~0x7315,WPR3_Split_Heating_power_controller_Prop_Portion~0x7315
 Setpt,9,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",nviDHWC_Setpt~0xA3C0,nviDHWC_Setpt~0xA3C0
 Subnet,9,"Ecotronic, VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",Node_Subnet~0xA000,Node_Subnet~0xA000
 Digital,8,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Verdichter1_PWMZykluszeit_Digital_Scroll~0x501E,WPR_Compressor_1_PWM_cycle_time_Digital_Scroll~0x501E
-dt,8,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_WW_TWWSpeicher_dT_dt_MigrationChange_33~0x600D,WPR_WW_Hot_water_storage_dT_dt_migration_Change_33~0x600D
+dt,8,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_WW_TWWSpeicher_dT_dt_MigrationChange_33~0x600D,WPR_DHW_TWW_Storage_dT_dt_migration_Change_33~0x600D
 eff,8,"VDensHO1_4, VPlusHO1_40, VScotHO1, VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_40, VScotHO1_72",Kesselsoll_eff~0x555A,boiler_setpoint_eff~0x555A
 Hybrid,8,"CU401B_A, CU401B_G, CU401B_S",WPR3_Ausstattungsmerkmal_Hybrid~0x07CC,WPR3_Features_Hybrid~0x07CC
 nviBoilerState,8,Ecotronic,nviBoilerState_PM_state_Boiler1~0xA200,nviBoilerState_PM_state_Boiler_1~0xA200
@@ -90,7 +90,7 @@ nviTimeSet,6,Ecotronic,nviTimeSet_Jahr~0xA103,nviTimeSet_Year~0xA103
 opt,6,"CU401B_A, CU401B_G, CU401B_S",WPR3_Vorgabe_Leistungsverbrauch_WP_opt~0xB052,WPR3_Specification_Power_consumption_WP_opt~0xB052
 Schlumberger,6,EcnDatapointType,@@viessmann.datapointtype.name.MBus_Schlumberger_01,viessmann_datapointtype_name_MBus_Schlumberger_01
 Sensor10,6,"CU401B_A, CU401B_G, CU401B_S",WPR3_Solar_Sensor10~0x01EF,WPR3_Solar_Sensor10~0x01EF
-not,5,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_WW_Hysterese_Warmwasser_not~0x6008,WPR_WW_Hysteresis_DHW_not~0x6008
+not,5,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_WW_Hysterese_Warmwasser_not~0x6008,WPR_DHW_Hysteresis_DHW_not~0x6008
 Thub,5,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Verdichter1_max_Thub_WP~0x5011,WPR_Compressor_1_Max_Thub_WP~0x5011
 Benner2,4,"Ecotronic, V200KW1, V200KW1_6, V200KW2_6",DigitalAusgang_ModAuf_Benner2~0x0849,Digital_output_ModOn_Benner2~0x0849
 Byte1,4,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Software_Version_Byte1~0x00FE,WPR_software_version_Byte1~0x00FE

@@ -12,6 +12,7 @@
   "Raumtemperatur": "RoomTemperature",
   "Speichertemperatur": "StorageTemperature",
   "Warmwasser": "DHW",
+  "WW": "DHW",
   "Warmwassertemperatur": "DHWTemperature",
   "Soll": "Setpoint",
   "Ist": "Actual",

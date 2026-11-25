@@ -289,13 +289,17 @@ def is_technical_token(part):
     """Return True for technical identifiers or numeric fragments preserved as-is."""
     return bool(re.fullmatch(r"(?:[A-Z0-9]+|[0-9]+)", part))
 
-def translate_parameter(s, translate_token):
+def translate_parameter(s, translate_token, technical_overrides=None):
+    technical_overrides = technical_overrides or {}
     parts, suffix = split_parameter(s)
     translated = []
 
     for part in parts:
+        # Exact-case overrides for technical tokens win over preservation (e.g. WW -> DHW).
+        if part in technical_overrides:
+            translated.append(technical_overrides[part])
         # Preserve obvious technical identifiers and numeric fragments.
-        if is_technical_token(part):
+        elif is_technical_token(part):
             translated.append(part)
         else:
             translated.append(translate_token(part))
@@ -490,6 +494,9 @@ def main():
         keep_original=keep_original,
     )
 
+    technical_overrides = {
+        k: v for k, v in merged.items() if is_technical_token(k) and k not in keep_original
+    }
     wb = load_workbook(src)
     changed = 0
     unchanged = 0
@@ -513,7 +520,7 @@ def main():
                 if isinstance(cell.value, str) and cell.value.strip():
                     total += 1
                     old = cell.value
-                    new = translate_parameter(old, translate_token)
+                    new = translate_parameter(old, translate_token, technical_overrides)
                     if new != old:
                         cell.value = new
                         changed += 1
