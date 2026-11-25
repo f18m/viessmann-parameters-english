@@ -203,6 +203,7 @@ TambMax,4,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_extWE_TambMax~0x7B02,
 TempMax,4,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Solaranlage_TempMax_solar~0x7A01,WPR_solar_system_TempMax_solar~0x7A01
 TempSens,4,"CU401B_A, CU401B_G, CU401B_S, VBC700_BW_WW",WPR_Produktmerkmal_TempSens_Prim_Ausg~0x090B,WPR_Product_feature_TempSens_Prime_Edition~0x090B
 to,4,CU401B_S,K5b_Flag_to_indicate_open_short~0x1A5B,K5b_Flag_to_indicate_open_short~0x1A5B
+VGrenzeBrennerBlockade,4,"VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_72",Neptun_VGrenzeBrennerBlockade~0x88EA,Neptune_VGrenzeBrennerBlockade~0x88EA
 VGrenzeRedBrLeistung,4,"VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_72",Neptun_VGrenzeRedBrLeistung~0x88E9,Neptune_VGrenzeRedBrLeistung~0x88E9
 WWSoll,4,"VScotHO1_200_01, VScotHO1_200_10, VScotHO1_200_11, VScotHO1_72",Neptun_WWSoll_Zweiter_Grenzwert~885E,Neptune_WWSoll_Second_Limit_value_885E
 0x0051,3,"CU401B_A, CU401B_G, CU401B_S",WPR3_Codierstecker_H_0x0051,WPR3_Coding_plug_H_0x0051
@@ -330,7 +331,7 @@ h,1,Ecotronic,Ecotronic_EA_Wert_5210_h~0x5210,Ecotronic_EA_Value_5210_h~0x5210
 height,1,CU401B_S,WPR3_Split.KF3_Install_height_J12_J13~0x1AF3,WPR3_Split_KF3_Install_height_J12_J13~0x1AF3
 High,1,CU401B_S,WPR3_Split.K75_High_Pressure_switch_value~0x1A75,WPR3_Split_K75_High_Pressure_switch_value~0x1A75
 HSTvalue,1,CU401B_S,WPR3_Split.K5F_HSTvalue~0x1A5F,WPR3_Split_K5F_HSTvalue~0x1A5F
-Idle,1,CU401B_S,WPR3_Split.K61_Idle_Coolingformultisplit~0x1A61,WPR3_Split_K61_Idle_Cooling_for_multi_split~0x1A61
+Idle,1,CU401B_S,WPR3_Split.K61_Idle_Coolingformultisplit~0x1A61,WPR3_Split_K61_Idle_Cooling_for_multisplit~0x1A61
 IfanForce,1,CU401B_S,WPR3_Split.K6E_IfanForce_Off~0x1A6E,WPR3_Split_K6E_IfanForce_Off~0x1A6E
 Indoor,1,CU401B_S,WPR3_Split.KEE_Indoor_fan_actual_rpm~0x1AEE,WPR3_Split_KEE_Indoor_fan_actual_rpm~0x1AEE
 Install,1,CU401B_S,WPR3_Split.KF3_Install_height_J12_J13~0x1AF3,WPR3_Split_KF3_Install_height_J12_J13~0x1AF3
