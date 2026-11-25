@@ -194,25 +194,141 @@ def build_token_translator(
 
     return translate_token
 
+def is_technical_token(part):
+    """Return True for technical identifiers or numeric fragments preserved as-is."""
+    return bool(re.fullmatch(r"(?:[A-Z0-9]+|[0-9]+)", part))
+
 def translate_parameter(s, translate_token):
     parts, suffix = split_parameter(s)
     translated = []
 
     for part in parts:
         # Preserve obvious technical identifiers and numeric fragments.
-        if re.fullmatch(r"(?:[A-Z0-9]+|[0-9]+)", part):
+        if is_technical_token(part):
             translated.append(part)
         else:
             translated.append(translate_token(part))
 
     return "_".join(translated) + suffix
 
+def collect_untranslated(sheet_name, old_val, new_val, merged, token_stats):
+    """Record non-technical, non-dictionary tokens that remained unchanged."""
+    sparts, _ = split_parameter(old_val)
+    dparts, _ = split_parameter(new_val) if isinstance(new_val, str) else ([], "")
+    found = False
+
+    for sp in sparts:
+        if not sp or is_technical_token(sp) or sp in merged:
+            continue
+        san = sanitize_identifier(sp)
+        if sp in dparts or (san and san in dparts):
+            found = True
+            entry = token_stats.setdefault(
+                sp,
+                {
+                    "count": 0,
+                    "sheets": set(),
+                    "example_src": old_val,
+                    "example_dst": new_val or "",
+                },
+            )
+            entry["count"] += 1
+            entry["sheets"].add(sheet_name)
+
+    return found
+
+def write_untranslated_report(path, token_stats):
+    """Write untranslated tokens sorted by frequency descending."""
+    rows = sorted(
+        token_stats.items(),
+        key=lambda item: (-item[1]["count"], item[0].lower(), item[0]),
+    )
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Token", "Occurrences", "Sheets", "ExampleSource", "ExampleTranslated"])
+        for token, info in rows:
+            writer.writerow([
+                token,
+                info["count"],
+                ", ".join(sorted(info["sheets"])),
+                info["example_src"],
+                info["example_dst"],
+            ])
+
+def run_report_only(src_path, dst_path, merged):
+    """Compare existing input and translated workbooks without calling APIs."""
+    src_wb = load_workbook(src_path, read_only=True)
+    dst_wb = load_workbook(dst_path, read_only=True)
+    total = 0
+    changed = 0
+    unchanged = 0
+    params_with_untranslated = 0
+    token_stats = {}
+    skipped_sheets = []
+
+    for name in src_wb.sheetnames:
+        sws = src_wb[name]
+        cols = discover_parameter_columns(sws)
+        if not cols:
+            skipped_sheets.append(name)
+            continue
+        if name not in dst_wb.sheetnames:
+            continue
+        dws = dst_wb[name]
+        for sr, dr in zip(
+            sws.iter_rows(min_row=2, values_only=True),
+            dws.iter_rows(min_row=2, values_only=True),
+        ):
+            for col_idx in cols:
+                old = sr[col_idx] if col_idx < len(sr) else None
+                new = dr[col_idx] if col_idx < len(dr) else None
+                if not (isinstance(old, str) and old.strip()):
+                    continue
+                total += 1
+                if new != old:
+                    changed += 1
+                else:
+                    unchanged += 1
+                if collect_untranslated(name, old, new, merged, token_stats):
+                    params_with_untranslated += 1
+
+    return total, changed, unchanged, params_with_untranslated, token_stats, skipped_sheets
+
+def print_summary(
+    total,
+    changed,
+    unchanged,
+    params_with_untranslated=None,
+    token_stats=None,
+    skipped_sheets=None,
+    untranslated_path=None,
+    output_path=None,
+):
+    print(f"Processed: {total}")
+    print(f"Changed:   {changed}")
+    print(f"Unchanged: {unchanged}")
+    if token_stats is not None:
+        print(f"Params with untranslated tokens: {params_with_untranslated}")
+        print(f"Untranslated unique tokens:      {len(token_stats)}")
+    if skipped_sheets:
+        print(f"Skipped sheets (no row-1 parameter header): {', '.join(skipped_sheets)}")
+    if untranslated_path is not None:
+        print(f"Untranslated report: {untranslated_path}")
+    if output_path is not None:
+        print(f"Output:    {output_path}")
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", default="Viessmann_Parameter_Adresses_EN.xlsx")
+    ap.add_argument("--input", default="Viessmann.Parameter.Adresses.xlsx")
     ap.add_argument("--output", default="Viessmann_Parameter_Adresses_EN_translated.xlsx")
     ap.add_argument("--dictionary", default="dictionary.json")
     ap.add_argument("--review", default="translation_review.csv")
+    ap.add_argument("--untranslated", default="untranslated_tokens.csv")
+    ap.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Compare --input and --output to report untranslated tokens without translating.",
+    )
     ap.add_argument(
         "--provider",
         choices=["none", "google", "google-v2", "google-v3", "deepl"],
@@ -234,7 +350,24 @@ def main():
     src = Path(args.input)
     dictionary = load_dictionary(Path(args.dictionary))
     review = load_review(Path(args.review))
-    
+    merged = {**dictionary, **review}
+
+    if args.report_only:
+        total, changed, unchanged, params_with_untranslated, token_stats, skipped_sheets = (
+            run_report_only(src, Path(args.output), merged)
+        )
+        write_untranslated_report(Path(args.untranslated), token_stats)
+        print_summary(
+            total,
+            changed,
+            unchanged,
+            params_with_untranslated=params_with_untranslated,
+            token_stats=token_stats,
+            skipped_sheets=skipped_sheets,
+            untranslated_path=args.untranslated,
+        )
+        return
+
     print(f"Using translator: {args.provider}")
     translate_token = build_token_translator(
         dictionary,
@@ -247,10 +380,20 @@ def main():
 
     wb = load_workbook(src)
     changed = 0
+    unchanged = 0
     total = 0
+    params_with_untranslated = 0
+    token_stats = {}
+    skipped_sheets = []
 
     for ws in wb.worksheets:
-        for col_idx in discover_parameter_columns(ws):
+        cols = discover_parameter_columns(ws)
+        if not cols:
+            print(f"Processing sheet: {ws.title} (skipped: no row-1 parameter header)", flush=True)
+            skipped_sheets.append(ws.title)
+            continue
+        print(f"Processing sheet: {ws.title}", flush=True)
+        for col_idx in cols:
             for row in ws.iter_rows(min_row=2):
                 cell = row[col_idx]
                 if isinstance(cell.value, str) and cell.value.strip():
@@ -260,13 +403,29 @@ def main():
                     if new != old:
                         cell.value = new
                         changed += 1
-                    if args.provider != "none" and (total % 100) == 0:
-                        print(f"translated {total} params")
+                    else:
+                        unchanged += 1
+                    if args.provider != "none":
+                        if collect_untranslated(ws.title, old, new, merged, token_stats):
+                            params_with_untranslated += 1
+                        if (total % 100) == 0:
+                            print(f"translated {total} params", flush=True)
 
     wb.save(args.output)
-    print(f"Processed: {total}")
-    print(f"Changed:   {changed}")
-    print(f"Output:    {args.output}")
+    untranslated_path = None
+    if args.provider != "none":
+        write_untranslated_report(Path(args.untranslated), token_stats)
+        untranslated_path = args.untranslated
+    print_summary(
+        total,
+        changed,
+        unchanged,
+        params_with_untranslated=params_with_untranslated if args.provider != "none" else None,
+        token_stats=token_stats if args.provider != "none" else None,
+        skipped_sheets=skipped_sheets,
+        untranslated_path=untranslated_path,
+        output_path=args.output,
+    )
 
 if __name__ == "__main__":
     main()

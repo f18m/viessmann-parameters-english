@@ -40,3 +40,7 @@ dry-run:
 # Run translation using Google Cloud Translation v3
 translate:
     {{python}} viessmann_translate.py --provider google-v3 --project {{project}}
+
+# Report untranslated tokens by comparing input and translated Excel files
+report:
+    {{python}} viessmann_translate.py --report-only

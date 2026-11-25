@@ -1,3 +1,4 @@
 google-cloud-sdk/
 *.pyc
 __pycache__/
+.~lock.*#
