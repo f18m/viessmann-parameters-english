@@ -3,13 +3,15 @@
 Viessmann Excel parameter translator.
 
 Workflow:
-  1. Run --extract to create translation_review.csv.
-  2. Fill EnglishTranslation for tokens you want to override.
-  3. Add/adjust dictionary.json.
-  4. Run --translate to create the translated Excel.
+  1. Fill EnglishTranslation in translation_review.csv for tokens to override.
+  2. Add/adjust dictionary.json.
+  3. Run the translator to create the translated Excel.
 
-For automatic translation, set GOOGLE_APPLICATION_CREDENTIALS and use:
-  python viessmann_translate.py --translate --provider google
+For automatic translation with Google Cloud Translation v3 (default when
+--project or GOOGLE_CLOUD_PROJECT is set, falling back to v2 otherwise):
+  python viessmann_translate.py --provider google --project <PROJECT_ID>
+
+You can also force v3 or v2 explicitly with --provider google-v3 / google-v2.
 
 The program preserves technical prefixes, hexadecimal addresses and all
 non-Parameter cells.
@@ -59,31 +61,118 @@ def discover_parameter_columns(ws):
             result.append(i)
     return result
 
-def build_token_translator(dictionary, review, provider):
+def sanitize_identifier(text):
+    """Normalize translated text into an underscore-separated identifier."""
+    return re.sub(r"[^A-Za-z0-9]+", "_", str(text)).strip("_")
+
+def resolve_google_project(explicit_project=None):
+    """Resolve Google Cloud project ID from CLI arg, env vars, or ADC."""
+    if explicit_project and explicit_project.strip():
+        return explicit_project.strip()
+    for var in ("GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"):
+        val = os.environ.get(var, "").strip()
+        if val:
+            return val
+    try:
+        import google.auth
+        _, project_id = google.auth.default()
+        if project_id:
+            return project_id
+    except Exception:
+        pass
+    return None
+
+def _build_google_v3_translator(project, location):
+    """Create a token translator backed by Google Cloud Translation v3."""
+    try:
+        from google.cloud import translate_v3
+    except ImportError:
+        raise SystemExit(
+            "Google provider selected but google-cloud-translate is not installed. "
+            "Install with: pip install google-cloud-translate"
+        )
+    client = translate_v3.TranslationServiceClient()
+    parent = f"projects/{project}/locations/{location}"
+    print(f"Google Cloud Translation API: v3 ({parent})")
+
+    def translate(token):
+        resp = client.translate_text(
+            request={
+                "parent": parent,
+                "contents": [token],
+                "mime_type": "text/plain",
+                "source_language_code": "de",
+                "target_language_code": "en",
+            }
+        )
+        return resp.translations[0].translated_text
+
+    return translate
+
+def _build_google_v2_translator():
+    """Create a token translator backed by Google Cloud Translation v2."""
+    try:
+        from google.cloud import translate_v2 as translate
+    except ImportError:
+        raise SystemExit(
+            "Google provider selected but google-cloud-translate is not installed. "
+            "Install with: pip install google-cloud-translate"
+        )
+    google_client = translate.Client()
+    print("Google Cloud Translation API: v2")
+
+    def translate(token):
+        return google_client.translate(
+            token, source_language="de", target_language="en"
+        )["translatedText"]
+
+    return translate
+
+def _build_deepl_translator():
+    """Create a token translator backed by DeepL."""
+    try:
+        import deepl
+    except ImportError:
+        raise SystemExit("DeepL provider selected but deepl is not installed.")
+    auth_key = os.environ.get("DEEPL_API_KEY", "").strip()
+    if not auth_key:
+        raise SystemExit("DeepL provider selected but DEEPL_API_KEY is not set.")
+    deepl_client = deepl.DeepLClient(auth_key)
+
+    def translate(token):
+        return deepl_client.translate_text(
+            token, source_lang="de", target_lang="en-us"
+        )
+
+    return translate
+
+def build_token_translator(
+    dictionary, review, provider, project=None, location="global", delay=0.0
+):
     merged = {**dictionary, **review}
     cache = {}
+    api_translate = None
 
-    # Google Cloud Translation v3/v2 fallback through google-cloud-translate.
-    google_client = None
-    if provider == "google":
-        try:
-            from google.cloud import translate_v2 as translate
-            google_client = translate.Client()
-        except ImportError:
+    if provider == "google-v3":
+        resolved_project = resolve_google_project(project)
+        if not resolved_project:
             raise SystemExit(
-                "Google provider selected but google-cloud-translate is not installed. "
-                "Install with: pip install google-cloud-translate"
+                "Google Cloud Translation v3 requires a project ID. "
+                "Pass --project <PROJECT_ID> or set GOOGLE_CLOUD_PROJECT."
             )
+        api_translate = _build_google_v3_translator(resolved_project, location)
+    elif provider == "google-v2":
+        api_translate = _build_google_v2_translator()
+    elif provider == "google":
+        resolved_project = resolve_google_project(project)
+        if resolved_project:
+            api_translate = _build_google_v3_translator(resolved_project, location)
+        else:
+            api_translate = _build_google_v2_translator()
     elif provider == "deepl":
-        try:
-            import deepl
-            auth_key = os.environ["DEEPL_API_KEY"]
-            deepl_client = deepl.DeepLClient(auth_key)
-        except ImportError:
-            raise SystemExit(
-                "DeepL provider selected but not working"
-            )
-        
+        api_translate = _build_deepl_translator()
+    elif provider != "none":
+        raise ValueError(provider)
 
     def translate_token(token):
         if token in merged:
@@ -95,19 +184,10 @@ def build_token_translator(dictionary, review, provider):
 
         if provider == "none":
             result = token
-        elif provider == "google":
-            result = google_client.translate(token, source_language="de",
-                                             target_language="en")["translatedText"]
-            # Parameter names are identifiers: remove spaces/punctuation.
-            result = re.sub(r"[^A-Za-z0-9]+", "_", result).strip("_")
-        elif provider == "deepl":
-            result = deepl_client.translate_text(token, source_lang="de",
-                                             target_lang="en-us")
-            # Parameter names are identifiers: remove spaces/punctuation.
-            result = str(result)
-            result = re.sub(r"[^A-Za-z0-9]+", "_", result).strip("_")
         else:
-            raise ValueError(provider)
+            result = sanitize_identifier(api_translate(token))
+            if delay > 0:
+                time.sleep(delay)
 
         cache[token] = result
         return result
@@ -133,7 +213,21 @@ def main():
     ap.add_argument("--output", default="Viessmann_Parameter_Adresses_EN_translated.xlsx")
     ap.add_argument("--dictionary", default="dictionary.json")
     ap.add_argument("--review", default="translation_review.csv")
-    ap.add_argument("--provider", choices=["none", "google", "deepl"], default="none")
+    ap.add_argument(
+        "--provider",
+        choices=["none", "google", "google-v2", "google-v3", "deepl"],
+        default="none",
+    )
+    ap.add_argument(
+        "--project",
+        default=None,
+        help="Google Cloud project ID for Cloud Translation v3.",
+    )
+    ap.add_argument(
+        "--location",
+        default="global",
+        help="Google Cloud location for Translation v3 (default: global).",
+    )
     ap.add_argument("--delay", type=float, default=0.05)
     args = ap.parse_args()
 
@@ -142,7 +236,14 @@ def main():
     review = load_review(Path(args.review))
     
     print(f"Using translator: {args.provider}")
-    translate_token = build_token_translator(dictionary, review, args.provider)
+    translate_token = build_token_translator(
+        dictionary,
+        review,
+        args.provider,
+        project=args.project,
+        location=args.location,
+        delay=args.delay,
+    )
 
     wb = load_workbook(src)
     changed = 0
@@ -159,10 +260,8 @@ def main():
                     if new != old:
                         cell.value = new
                         changed += 1
-                    if args.provider != "none":
-                        time.sleep(args.delay)
-                        if (total % 100) == 0:
-                            print(f"translated {total} params")
+                    if args.provider != "none" and (total % 100) == 0:
+                        print(f"translated {total} params")
 
     wb.save(args.output)
     print(f"Processed: {total}")
