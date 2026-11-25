@@ -26,6 +26,9 @@ My approach to translation consists in a small Python script to automate the tra
 
 The translator uses a mix of static dictionaries and [Google Cloud Translation](https://cloud.google.com/translate) (v3 by default when a project is set, with v2 fallback) or [DeepL API interface](https://www.deepl.com/it/translator) to achieve semi-automated translation.
 
+Each `just translate` run takes about 7 minutes.
+
+
 ### Files
 
 - `Viessmann.Parameter.Adresses.xlsx` : default input Excel workbook (German parameters)
@@ -49,7 +52,7 @@ GueltSollleistung,ValidSetpointPower,,abbreviated German compound
 
 - `GermanToken`: A single underscore-separated token extracted from parameter names (excluding `~0x...` hex suffixes).
 - `EnglishTranslation`: The English replacement to use. Rows with a non-empty `EnglishTranslation` override both `dictionary.json` and the translation API; rows where it is blank are ignored and fall back to `dictionary.json` or the selected API provider.
-- `KeepOriginal`: Optional review column for your own tracking (currently ignored by `viessmann_translate.py` — to force keeping a token unchanged, set `EnglishTranslation` to the same value as `GermanToken`).
+- `KeepOriginal`: Set to `true` / `yes` / `1` to preserve `GermanToken` verbatim without translating it and omit it from `untranslated_tokens.csv`.
 - `Notes`: Optional free-text notes (ignored by the script).
 
 ### Recommended workflow (using `just`)

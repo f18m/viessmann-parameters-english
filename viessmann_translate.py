@@ -22,6 +22,8 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 PARAM_HEADERS = {"parameter", "parameter name", "parametername", "param", "name"}
+KEEP_ORIGINAL_TRUTHY = {"1", "true", "yes", "y", "x"}
+CAMEL_SKIP_PREFIXES = ("nvi", "nvo", "nci", "Vito", "resProd", "valmRPC", "vlogRPC")
 
 def load_dictionary(path):
     if not path.exists():
@@ -35,31 +37,63 @@ def split_parameter(s):
     if m:
         suffix = m.group(1)
         core = core[:m.start()]
-    return core.split("_"), suffix
+    parts = [p for p in re.split(r"[._]+", core) if p]
+    return parts, suffix
+
+def split_camel_case(token):
+    """Split a CamelCase identifier into component words."""
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", token)
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
+    return [p for p in s.split() if p]
 
 def load_review(path):
-    d = {}
+    """Load EnglishTranslation overrides and KeepOriginal flags from CSV."""
+    overrides = {}
+    keep_original = set()
     if not path.exists():
-        return d
+        return overrides, keep_original
     with path.open(newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             token = row.get("GermanToken", "").strip()
+            if not token:
+                continue
+            keep = row.get("KeepOriginal", "").strip().lower()
             tr = row.get("EnglishTranslation", "").strip()
-            if token and tr:
-                d[token] = tr
-    return d
+            if keep in KEEP_ORIGINAL_TRUTHY:
+                keep_original.add(token)
+            elif tr:
+                overrides[token] = tr
+    return overrides, keep_original
 
 def discover_parameter_columns(ws):
+    cols, _ = discover_parameter_target(ws)
+    return cols
+
+def discover_parameter_target(ws):
+    """Return (column_indices, start_row) for a worksheet's parameter column(s)."""
     try:
         header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
     except StopIteration:
-        return []
-    result = []
+        return [], 2
+
+    header_cols = []
     for i, h in enumerate(header):
-        h = str(h).strip().lower() if h is not None else ""
-        if h in PARAM_HEADERS or "parameter" in h:
-            result.append(i)
-    return result
+        h_norm = str(h).strip().lower() if h is not None else ""
+        if h_norm in PARAM_HEADERS or "parameter" in h_norm:
+            header_cols.append(i)
+    if header_cols:
+        return header_cols, 2
+
+    # Fallback for headerless parameter sheets (e.g., V200KW1_6, V200KW2_6, VPlusHO1_40).
+    col_hits = {}
+    for row in ws.iter_rows(min_row=1, max_row=50, values_only=True):
+        for i, val in enumerate(row):
+            if isinstance(val, str) and re.search(r"~0x[0-9A-Fa-f]+$", val.strip()):
+                col_hits[i] = col_hits.get(i, 0) + 1
+    inferred_cols = sorted(i for i, count in col_hits.items() if count >= 3)
+    if inferred_cols:
+        return inferred_cols, 1
+    return [], 2
 
 def sanitize_identifier(text):
     """Normalize translated text into an underscore-separated identifier."""
@@ -146,10 +180,36 @@ def _build_deepl_translator():
 
     return translate
 
-def build_token_translator(
-    dictionary, review, provider, project=None, location="global", delay=0.0
-):
+def build_lookup_tables(dictionary, review, keep_original=None):
+    """Build exact and case-insensitive override/keep lookup tables."""
     merged = {**dictionary, **review}
+    merged_lower = {}
+    for k, v in merged.items():
+        merged_lower.setdefault(k.lower(), v)
+    keep_exact = set(keep_original or ())
+    keep_lower = {k.lower() for k in keep_exact}
+    return merged, merged_lower, keep_exact, keep_lower
+
+def lookup_override(token, merged, merged_lower, keep_exact, keep_lower):
+    """Return an explicit override/keep value for token, or None if not overridden."""
+    if token in keep_exact or token.lower() in keep_lower:
+        return token
+    if token in merged:
+        return merged[token]
+    return merged_lower.get(token.lower())
+
+def build_token_translator(
+    dictionary,
+    review,
+    provider,
+    project=None,
+    location="global",
+    delay=0.0,
+    keep_original=None,
+):
+    merged, merged_lower, keep_exact, keep_lower = build_lookup_tables(
+        dictionary, review, keep_original
+    )
     cache = {}
     api_translate = None
 
@@ -174,20 +234,51 @@ def build_token_translator(
     elif provider != "none":
         raise ValueError(provider)
 
-    def translate_token(token):
-        if token in merged:
-            return merged[token]
-        if token in cache:
-            return cache[token]
+    def _translate_atomic(token):
         if len(token) == 0:
             return ""
-
+        if is_technical_token(token):
+            return token
+        override = lookup_override(token, merged, merged_lower, keep_exact, keep_lower)
+        if override is not None:
+            return override
+        if token in cache:
+            return cache[token]
         if provider == "none":
-            result = token
-        else:
-            result = sanitize_identifier(api_translate(token))
-            if delay > 0:
-                time.sleep(delay)
+            return token
+        result = sanitize_identifier(api_translate(token))
+        if delay > 0:
+            time.sleep(delay)
+        cache[token] = result
+        return result
+
+    def translate_token(token):
+        if len(token) == 0:
+            return ""
+        override = lookup_override(token, merged, merged_lower, keep_exact, keep_lower)
+        if override is not None:
+            return override
+        if token in cache:
+            return cache[token]
+        if provider == "none":
+            cache[token] = token
+            return token
+
+        san_orig = sanitize_identifier(token)
+        result = _translate_atomic(token)
+
+        # Fallback: if API echoed a CamelCase compound unchanged, split and translate parts.
+        if (
+            result == san_orig
+            and len(token) > 4
+            and not token.startswith(CAMEL_SKIP_PREFIXES)
+        ):
+            subparts = split_camel_case(token)
+            if len(subparts) > 1:
+                sub_results = [_translate_atomic(sub) for sub in subparts]
+                combined = "_".join(r for r in sub_results if r)
+                if combined and combined != san_orig:
+                    result = combined
 
         cache[token] = result
         return result
@@ -211,14 +302,28 @@ def translate_parameter(s, translate_token):
 
     return "_".join(translated) + suffix
 
-def collect_untranslated(sheet_name, old_val, new_val, merged, token_stats):
+def collect_untranslated(
+    sheet_name,
+    old_val,
+    new_val,
+    merged,
+    token_stats,
+    merged_lower=None,
+    keep_exact=None,
+    keep_lower=None,
+):
     """Record non-technical, non-dictionary tokens that remained unchanged."""
     sparts, _ = split_parameter(old_val)
     dparts, _ = split_parameter(new_val) if isinstance(new_val, str) else ([], "")
+    merged_lower = merged_lower or {}
+    keep_exact = keep_exact or set()
+    keep_lower = keep_lower or set()
     found = False
 
     for sp in sparts:
-        if not sp or is_technical_token(sp) or sp in merged:
+        if not sp or is_technical_token(sp):
+            continue
+        if lookup_override(sp, merged, merged_lower, keep_exact, keep_lower) is not None:
             continue
         san = sanitize_identifier(sp)
         if sp in dparts or (san and san in dparts):
@@ -255,7 +360,7 @@ def write_untranslated_report(path, token_stats):
                 info["example_dst"],
             ])
 
-def run_report_only(src_path, dst_path, merged):
+def run_report_only(src_path, dst_path, merged, merged_lower, keep_exact, keep_lower):
     """Compare existing input and translated workbooks without calling APIs."""
     src_wb = load_workbook(src_path, read_only=True)
     dst_wb = load_workbook(dst_path, read_only=True)
@@ -268,7 +373,7 @@ def run_report_only(src_path, dst_path, merged):
 
     for name in src_wb.sheetnames:
         sws = src_wb[name]
-        cols = discover_parameter_columns(sws)
+        cols, start_row = discover_parameter_target(sws)
         if not cols:
             skipped_sheets.append(name)
             continue
@@ -276,8 +381,8 @@ def run_report_only(src_path, dst_path, merged):
             continue
         dws = dst_wb[name]
         for sr, dr in zip(
-            sws.iter_rows(min_row=2, values_only=True),
-            dws.iter_rows(min_row=2, values_only=True),
+            sws.iter_rows(min_row=start_row, values_only=True),
+            dws.iter_rows(min_row=start_row, values_only=True),
         ):
             for col_idx in cols:
                 old = sr[col_idx] if col_idx < len(sr) else None
@@ -289,7 +394,9 @@ def run_report_only(src_path, dst_path, merged):
                     changed += 1
                 else:
                     unchanged += 1
-                if collect_untranslated(name, old, new, merged, token_stats):
+                if collect_untranslated(
+                    name, old, new, merged, token_stats, merged_lower, keep_exact, keep_lower
+                ):
                     params_with_untranslated += 1
 
     return total, changed, unchanged, params_with_untranslated, token_stats, skipped_sheets
@@ -311,7 +418,7 @@ def print_summary(
         print(f"Params with untranslated tokens: {params_with_untranslated}")
         print(f"Untranslated unique tokens:      {len(token_stats)}")
     if skipped_sheets:
-        print(f"Skipped sheets (no row-1 parameter header): {', '.join(skipped_sheets)}")
+        print(f"Skipped sheets (no parameter column detected): {', '.join(skipped_sheets)}")
     if untranslated_path is not None:
         print(f"Untranslated report: {untranslated_path}")
     if output_path is not None:
@@ -349,12 +456,16 @@ def main():
 
     src = Path(args.input)
     dictionary = load_dictionary(Path(args.dictionary))
-    review = load_review(Path(args.review))
-    merged = {**dictionary, **review}
+    review, keep_original = load_review(Path(args.review))
+    merged, merged_lower, keep_exact, keep_lower = build_lookup_tables(
+        dictionary, review, keep_original
+    )
 
     if args.report_only:
         total, changed, unchanged, params_with_untranslated, token_stats, skipped_sheets = (
-            run_report_only(src, Path(args.output), merged)
+            run_report_only(
+                src, Path(args.output), merged, merged_lower, keep_exact, keep_lower
+            )
         )
         write_untranslated_report(Path(args.untranslated), token_stats)
         print_summary(
@@ -376,6 +487,7 @@ def main():
         project=args.project,
         location=args.location,
         delay=args.delay,
+        keep_original=keep_original,
     )
 
     wb = load_workbook(src)
@@ -387,14 +499,16 @@ def main():
     skipped_sheets = []
 
     for ws in wb.worksheets:
-        cols = discover_parameter_columns(ws)
+        cols, start_row = discover_parameter_target(ws)
         if not cols:
-            print(f"Processing sheet: {ws.title} (skipped: no row-1 parameter header)", flush=True)
+            print(f"Processing sheet: {ws.title} (skipped: no parameter column detected)", flush=True)
             skipped_sheets.append(ws.title)
             continue
         print(f"Processing sheet: {ws.title}", flush=True)
         for col_idx in cols:
-            for row in ws.iter_rows(min_row=2):
+            for row in ws.iter_rows(min_row=start_row):
+                if col_idx >= len(row):
+                    continue
                 cell = row[col_idx]
                 if isinstance(cell.value, str) and cell.value.strip():
                     total += 1
@@ -406,7 +520,16 @@ def main():
                     else:
                         unchanged += 1
                     if args.provider != "none":
-                        if collect_untranslated(ws.title, old, new, merged, token_stats):
+                        if collect_untranslated(
+                            ws.title,
+                            old,
+                            new,
+                            merged,
+                            token_stats,
+                            merged_lower,
+                            keep_exact,
+                            keep_lower,
+                        ):
                             params_with_untranslated += 1
                         if (total % 100) == 0:
                             print(f"translated {total} params", flush=True)
